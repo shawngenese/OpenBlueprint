@@ -1,0 +1,154 @@
+// Prisma schema for AI Project Consultant MVP
+// PostgreSQL (Supabase/Neon) + Prisma — Phase 1 Foundation
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Project lifecycle: draft -> questioning (after Call 1) -> generated (after Call 2)
+enum ProjectStatus {
+  draft
+  questioning
+  generated
+}
+
+// 20 canonical section keys — validates Call 2 Generator output (AGENTS.md: Call 2 must validate against 20-section Zod schema)
+enum SectionKey {
+  overview
+  problem
+  goals
+  targetUsers
+  roles
+  features
+  functionalReq
+  nonFunctionalReq
+  techStack
+  altStacks
+  architecture
+  database
+  api
+  uiPages
+  security
+  scalability
+  roadmap
+  complexity
+  risks
+  future
+}
+
+// Auth.js (NextAuth v5) compatible User — supports Google, GitHub OAuth + Credentials (password)
+model User {
+  id             String          @id @default(cuid())
+  name           String?
+  email          String          @unique
+  emailVerified  DateTime?
+  image          String?
+  password       String?         @db.Text // hashed, for Credentials provider only
+  accounts       Account[]
+  sessions       Session[]
+  projects       Project[]
+  generationLogs GenerationLog[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Project {
+  id        String        @id @default(cuid())
+  title     String
+  rawIdea   String        @db.Text
+  status    ProjectStatus @default(draft)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blueprint Blueprint?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model Blueprint {
+  id        String    @id @default(cuid())
+  projectId String    @unique
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sections  Section[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// Individual Section records mapped to Blueprint — NOT chat history blobs (AGENTS.md: Architectural Rule 2)
+// Per-section regeneration updates ONLY targeted Section.key (AGENTS.md: Rule 3)
+model Section {
+  id          String     @id @default(cuid())
+  blueprintId String
+  blueprint   Blueprint  @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  key         SectionKey
+  title       String
+  content     String     @db.Text
+  order       Int
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([blueprintId, key])
+  @@index([blueprintId])
+}
+
+// Rate limiting: max 5 generations per user per day (Phase 5)
+model GenerationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  type      String   @default("generate") // generate | regenerate
+  key       String? // SectionKey for regenerate
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId])
+}
