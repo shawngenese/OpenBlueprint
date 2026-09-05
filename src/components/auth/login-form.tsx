@@ -9,10 +9,23 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mail, Lock } from "lucide-react";
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  OAuthAccountNotLinked:
+    "This email is already registered with a different sign-in method. Sign in with your original method, or try again — your accounts will be linked automatically.",
+  AccessDenied: "Access denied by the provider. Please try again.",
+  Verification: "The sign-in link is invalid or has expired. Please try again.",
+  Configuration: "Sign-in is misconfigured. Please contact support.",
+};
+
+function toFriendlyError(raw: string | null): string | null {
+  if (!raw) return null;
+  return OAUTH_ERROR_MESSAGES[raw] ?? raw;
+}
+
 export function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-  const [error, setError] = useState<string | null>(searchParams.get("error"));
+  const [error, setError] = useState<string | null>(toFriendlyError(searchParams.get("error")));
   const [isPending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
