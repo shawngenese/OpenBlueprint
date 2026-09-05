@@ -20,53 +20,60 @@ export function SectionItem({ section, defaultOpen = true }: { section: Section;
   const [open, setOpen] = useState(defaultOpen);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(section.content);
-  const [status, setStatus] = useState<"idle" | "typing" | "saving" | "saved" | "error">("idle");
+  const [savedValue, setSavedValue] = useState(section.content);
+  const [asyncStatus, setAsyncStatus] = useState<"saving" | "saved" | "error" | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Keep local value in sync if prop changes externally (e.g., regenerate)
-  useEffect(() => {
+  // Keep local value in sync if prop changes externally (e.g., regenerate).
+  // Adjusted during render (React-endorsed "previous render info" pattern) instead of in an effect.
+  const [prevContent, setPrevContent] = useState(section.content);
+  if (section.content !== prevContent) {
+    setPrevContent(section.content);
     setValue(section.content);
-  }, [section.content]);
+    setSavedValue(section.content);
+  }
+
+  // Derived status — "typing"/"idle" are computed, only async operation results are stored.
+  const dirty = value !== savedValue;
+  const status = asyncStatus ?? (dirty && editing ? "typing" : "idle");
 
   // 1-second debounce auto-save while editing
   useEffect(() => {
     if (!editing) return;
-    if (value === section.content) {
-      setStatus("idle");
-      return;
-    }
-
-    setStatus("typing");
+    if (value === savedValue) return;
 
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    timerRef.current = setTimeout(async () => {
-      setStatus("saving");
-      try {
-        const res = await fetch(`/api/sections/${section.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: value }),
-        });
-        if (!res.ok) throw new Error("Save failed");
-        setStatus("saved");
-        setTimeout(() => setStatus("idle"), 1500);
-      } catch {
-        setStatus("error");
-      }
+    timerRef.current = setTimeout(() => {
+      void (async () => {
+        setAsyncStatus("saving");
+        try {
+          const res = await fetch(`/api/sections/${section.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: value }),
+          });
+          if (!res.ok) throw new Error("Save failed");
+          setSavedValue(value);
+          setAsyncStatus("saved");
+          setTimeout(() => setAsyncStatus(null), 1500);
+        } catch {
+          setAsyncStatus("error");
+        }
+      })();
     }, 1000);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [value, editing, section.id, section.content]);
+  }, [value, editing, savedValue, section.id]);
 
   const toggleEdit = () => {
-    if (editing && value !== section.content) {
+    if (editing && value !== savedValue) {
       // flush pending save immediately on exit
       if (timerRef.current) clearTimeout(timerRef.current);
-      setStatus("saving");
+      setAsyncStatus("saving");
       fetch(`/api/sections/${section.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -74,17 +81,18 @@ export function SectionItem({ section, defaultOpen = true }: { section: Section;
       })
         .then((r) => {
           if (!r.ok) throw new Error();
-          setStatus("saved");
-          setTimeout(() => setStatus("idle"), 1500);
+          setSavedValue(value);
+          setAsyncStatus("saved");
+          setTimeout(() => setAsyncStatus(null), 1500);
         })
-        .catch(() => setStatus("error"));
+        .catch(() => setAsyncStatus("error"));
     }
     setEditing((e) => !e);
   };
 
   const handleRegenerate = async () => {
     setIsRegenerating(true);
-    setStatus("saving");
+    setAsyncStatus("saving");
     try {
       const res = await fetch(`/api/sections/${section.id}/regenerate`, {
         method: "POST",
@@ -94,11 +102,12 @@ export function SectionItem({ section, defaultOpen = true }: { section: Section;
       if (!res.ok) throw new Error("Regenerate failed");
       const data = await res.json();
       setValue(data.content);
-      setStatus("saved");
-      setTimeout(() => setStatus("idle"), 1500);
+      setSavedValue(data.content);
+      setAsyncStatus("saved");
+      setTimeout(() => setAsyncStatus(null), 1500);
       if (!open) setOpen(true);
     } catch {
-      setStatus("error");
+      setAsyncStatus("error");
     } finally {
       setIsRegenerating(false);
     }
@@ -168,7 +177,10 @@ export function SectionItem({ section, defaultOpen = true }: { section: Section;
             <div className="flex flex-col gap-2">
               <Textarea
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
+                onChange={(e) => {
+                  setValue(e.target.value);
+                  setAsyncStatus(null);
+                }}
                 rows={10}
                 className="min-h-[180px] font-mono text-sm leading-6"
                 placeholder="Write markdown…"
