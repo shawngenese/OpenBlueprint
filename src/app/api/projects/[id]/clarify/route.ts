@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateClarifierQuestions } from "@/lib/ai/clarifier";
+import { checkAndRecordGeneration, getRateLimitHeaders } from "@/lib/rateLimit";
 
 export async function POST(
   _req: NextRequest,
@@ -22,6 +23,15 @@ export async function POST(
 
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !process.env.GEMINI_API_KEY) {
     return NextResponse.json({ error: "GOOGLE_GENERATIVE_AI_API_KEY (Gemini) not configured" }, { status: 500 });
+  }
+
+  // Atomic rate limit check — counts Clarify toward the same 2/day quota
+  const rate = await checkAndRecordGeneration(user.id, { projectId: project.id, type: "clarify" });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded: max 2 clarifications/generations per day. Try again after ${rate.resetAt.toLocaleString()}.` },
+      { status: 429, headers: getRateLimitHeaders(rate.remaining, rate.resetAt) }
+    );
   }
 
   try {

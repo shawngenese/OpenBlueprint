@@ -14,6 +14,8 @@ export function ProjectActions({ projectId, hasBlueprint }: { projectId: string;
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Array<{ question: string; rationale?: string }>>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [rateRemaining, setRateRemaining] = useState<number | null>(null);
+  const [rateResetAt, setRateResetAt] = useState<Date | null>(null);
 
   const handleClarify = () => {
     setError(null);
@@ -22,7 +24,20 @@ export function ProjectActions({ projectId, hasBlueprint }: { projectId: string;
       try {
         const res = await fetch(`/api/projects/${projectId}/clarify`, { method: "POST" });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Clarify failed");
+        if (!res.ok) {
+          if (res.status === 429) {
+            setError(data.error || "Rate limit reached. Try again later.");
+          } else {
+            setError(data.error || "Clarify failed");
+          }
+          // Parse reset time from rate limit headers if present
+          const reset = res.headers.get("X-RateLimit-Reset");
+          if (reset) setRateResetAt(new Date(Number(reset) * 1000));
+          const remaining = res.headers.get("X-RateLimit-Remaining");
+          if (remaining) setRateRemaining(Number(remaining));
+          setMode("idle");
+          return;
+        }
         setQuestions(data.questions || []);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Clarify failed");
@@ -68,9 +83,9 @@ export function ProjectActions({ projectId, hasBlueprint }: { projectId: string;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2">
-        <Button onClick={handleClarify} disabled={isPending} variant="secondary" className="rounded-full gap-1.5">
+        <Button onClick={handleClarify} disabled={isPending || rateRemaining === 0} variant="secondary" className="rounded-full gap-1.5">
           {isPending && mode === "clarify" ? <Loader2 className="size-4 animate-spin" /> : <MessageCircleQuestion className="size-4" />}
-          Clarify (max 5)
+          Clarify ({rateRemaining !== null ? rateRemaining : "max 2"})
         </Button>
         <Button onClick={handleGenerate} disabled={isPending} className="rounded-full gap-1.5">
           {isPending && mode === "generate" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
@@ -100,8 +115,13 @@ export function ProjectActions({ projectId, hasBlueprint }: { projectId: string;
       )}
 
       {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
+      {rateRemaining !== null && rateRemaining === 0 && rateResetAt && (
+        <p className="text-xs text-muted-foreground">
+          Rate limit reached. Resets after {rateResetAt.toLocaleString()}.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
-        Rate limit: 2 generations/day per user. Tabs filter locally, never re-call LLM.
+        Rate limit: 2 generations/clarifications/day per user. Tabs filter locally, never re-call LLM.
       </p>
     </div>
   );
