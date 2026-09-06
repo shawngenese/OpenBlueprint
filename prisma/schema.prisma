@@ -4,11 +4,9 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
-  // "native" covers local dev; rhel-openssl-3.0.x is Vercel's serverless
-  // runtime — without it, `prisma generate` at build time downloads only the
-  // build machine's engine and the deployment crashes with
-  // PrismaClientInitializationError (engine not found).
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  // No binaryTargets: the app uses the PrismaPg driver adapter (see
+  // src/lib/db.ts), whose Wasm query compiler ships inside @prisma/client —
+  // no platform .so.node binary is needed at runtime (Vercel-safe).
 }
 
 datasource db {
