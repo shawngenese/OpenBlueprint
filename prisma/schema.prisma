@@ -2,11 +2,12 @@
 // PostgreSQL (Supabase/Neon) + Prisma — Phase 1 Foundation
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-  // No binaryTargets: the app uses the PrismaPg driver adapter (see
-  // src/lib/db.ts), whose Wasm query compiler ships inside @prisma/client —
-  // no platform .so.node binary is needed at runtime (Vercel-safe).
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+  // engineType = "client" (Rust-free Wasm query compiler, GA since 6.16):
+  // uses PrismaPg driver adapter (see src/lib/db.ts) — no platform
+  // .so.node binary, Vercel-safe. Do NOT add binaryTargets here.
 }
 
 datasource db {
