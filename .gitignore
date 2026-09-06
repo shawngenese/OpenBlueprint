@@ -53,4 +53,23 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/src/generated/prisma
+# prisma generated client (binary + TS)
+src/generated/
+!src/generated/.gitkeep
+
+# vitest / coverage
+coverage/
+dist/
+tmp/
+.cache/
+.eslintcache
+playwright-report/
+test-results/
+# sqlite local db
+*.db
+*.sqlite
+*.sqlite-journal
+
+# local AI agent tooling (project skills live under .opencode/skills/)
+.agents/
+skills-lock.json

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Lint, typecheck, smoke, build
+    name: Lint, typecheck, test, smoke, build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,6 +33,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run test
       - run: npm run smoke
       - run: npm run build
 
