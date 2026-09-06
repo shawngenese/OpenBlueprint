@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateBlueprint } from "@/lib/ai/blueprint";
 import { saveBlueprint } from "@/lib/persistence/blueprint";
-import { checkRateLimit, recordGeneration, getRateLimitHeaders } from "@/lib/rateLimit";
+import { checkAndRecordGeneration, getRateLimitHeaders } from "@/lib/rateLimit";
 
 const generateBodySchema = z.object({
   // Optional clarifier Q&A to enrich generation
@@ -49,10 +49,10 @@ export async function POST(
     return NextResponse.json({ error: "GOOGLE_GENERATIVE_AI_API_KEY (Gemini) not configured" }, { status: 500 });
   }
 
-  const rate = await checkRateLimit(user.id);
+  const rate = await checkAndRecordGeneration(user.id, { projectId: project.id, type: "generate" });
   if (!rate.allowed) {
     return NextResponse.json(
-      { error: `Rate limit exceeded: max 5 generations per day. Try again after ${rate.resetAt.toLocaleString()}.` },
+      { error: `Rate limit exceeded: max 2 generations per day. Try again after ${rate.resetAt.toLocaleString()}.` },
       { status: 429, headers: getRateLimitHeaders(rate.remaining, rate.resetAt) }
     );
   }
@@ -79,9 +79,8 @@ export async function POST(
     });
 
     const blueprint = await saveBlueprint(project.id, blueprintData);
-    await recordGeneration(user.id, { projectId: project.id, type: "generate" });
 
-    const headers = getRateLimitHeaders(rate.remaining - 1 >= 0 ? rate.remaining - 1 : 0, rate.resetAt);
+    const headers = getRateLimitHeaders(rate.remaining, rate.resetAt);
     return NextResponse.json({ blueprint, sections: blueprint?.sections }, { headers });
   } catch (e) {
     console.error("[generate] error", e);

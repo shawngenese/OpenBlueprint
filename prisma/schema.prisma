@@ -143,7 +143,7 @@ model Section {
   @@index([blueprintId])
 }
 
-// Rate limiting: max 5 generations per user per day (Phase 5)
+// Rate limiting: max 2 generations per user per day (Phase 5)
 model GenerationLog {
   id        String   @id @default(cuid())
   userId    String

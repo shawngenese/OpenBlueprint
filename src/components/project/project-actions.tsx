@@ -101,7 +101,7 @@ export function ProjectActions({ projectId, hasBlueprint }: { projectId: string;
 
       {error && <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
       <p className="text-xs text-muted-foreground">
-        Rate limit: 5 generations/day per user. Tabs filter locally, never re-call LLM.
+        Rate limit: 2 generations/day per user. Tabs filter locally, never re-call LLM.
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 
-const MAX_PER_DAY = 5;
+const MAX_PER_DAY = 2;
 
 // In-memory fallback for dev without DB or for fast path (also helps Vercel cold starts)
 // Key: userId, Value: { count, resetAt }
@@ -10,17 +10,62 @@ function getTodayWindow() {
   const now = new Date();
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
   const resetAt = new Date(start);
   resetAt.setDate(resetAt.getDate() + 1);
-  return { start, end, resetAt };
+  return { start, resetAt };
 }
 
+// Atomic check-and-record: single DB transaction so there is no TOCTOU race
+// between counting existing logs and inserting a new one. Returns the updated
+// remaining count (0 when limit exhausted, never negative).
+export async function checkAndRecordGeneration(
+  userId: string,
+  opts?: { projectId?: string; type?: string; key?: string }
+): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
+  const { start, resetAt } = getTodayWindow();
+
+  // Sync memory fallback so dev path stays fast & consistent with server clock
+  const now = Date.now();
+  const memEntry = memory.get(userId);
+  if (!memEntry || now >= memEntry.resetAt) {
+    memory.set(userId, { count: 0, resetAt: resetAt.getTime() });
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const count = await tx.generationLog.count({
+        where: { userId, createdAt: { gte: start } },
+      });
+      if (count >= MAX_PER_DAY) {
+        return { allowed: false, remaining: 0, resetAt };
+      }
+      await tx.generationLog.create({
+        data: { ...opts!, userId },
+      });
+      return { allowed: true, remaining: MAX_PER_DAY - count - 1, resetAt };
+    });
+
+    // Keep memory in sync on the success path
+    if (result.allowed) {
+      const entry = memory.get(userId);
+      if (entry) entry.count += 1;
+    }
+    return result;
+  } catch {
+    // DB unreachable — fall back to in-memory only
+    const entry = memory.get(userId)!;
+    if (!entry || entry.count >= MAX_PER_DAY) {
+      return { allowed: false, remaining: 0, resetAt };
+    }
+    entry.count += 1;
+    return { allowed: true, remaining: MAX_PER_DAY - entry.count, resetAt };
+  }
+}
+
+// Kept for callers that only need the remaining count / resetAt (no side effect)
 export async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
   const { start, resetAt } = getTodayWindow();
 
-  // Try DB count; fallback to memory if DB unreachable
   try {
     const count = await prisma.generationLog.count({
       where: { userId, createdAt: { gte: start } },
@@ -28,7 +73,6 @@ export async function checkRateLimit(userId: string): Promise<{ allowed: boolean
     const remaining = Math.max(0, MAX_PER_DAY - count);
     return { allowed: count < MAX_PER_DAY, remaining, resetAt };
   } catch {
-    // In-memory fallback
     const now = Date.now();
     const entry = memory.get(userId);
     if (!entry || now >= entry.resetAt) {
@@ -37,32 +81,6 @@ export async function checkRateLimit(userId: string): Promise<{ allowed: boolean
     }
     const remaining = Math.max(0, MAX_PER_DAY - entry.count);
     return { allowed: entry.count < MAX_PER_DAY, remaining, resetAt: new Date(entry.resetAt) };
-  }
-}
-
-export async function recordGeneration(
-  userId: string,
-  opts?: { projectId?: string; type?: string; key?: string }
-): Promise<void> {
-  const { projectId, type = "generate", key } = opts || {};
-
-  // Update memory
-  const { resetAt } = getTodayWindow();
-  const now = Date.now();
-  const entry = memory.get(userId);
-  if (!entry || now >= entry.resetAt) {
-    memory.set(userId, { count: 1, resetAt: resetAt.getTime() });
-  } else {
-    entry.count += 1;
-  }
-
-  // Try DB persist (non-blocking failure)
-  try {
-    await prisma.generationLog.create({
-      data: { userId, projectId, type, key },
-    });
-  } catch {
-    // ignore — memory already tracked
   }
 }
 
