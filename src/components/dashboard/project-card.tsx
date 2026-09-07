@@ -68,7 +68,7 @@ export function ProjectCard({ project }: { project: Project }) {
         </div>
       </CardContent>
 
-      <CardFooter className="p-0 flex items-center gap-2 bg-transparent border-0">
+      <CardFooter className="p-0 pt-2 pb-6 flex items-center gap-2 bg-transparent border-0">
         <Link
           href={project.blueprint ? `/project/${project.id}/blueprint` : `/project/${project.id}`}
           className={cn(buttonVariants({ size: "sm" }), "flex-1 gap-1.5 rounded-full")}

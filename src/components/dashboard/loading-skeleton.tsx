@@ -20,7 +20,7 @@ export function DashboardSkeleton() {
             <CardContent className="p-0">
               <Skeleton className="h-6 w-28 rounded-full" />
             </CardContent>
-            <CardFooter className="p-0 flex gap-2 bg-transparent border-0">
+            <CardFooter className="p-0 pt-2 pb-6 flex gap-2 bg-transparent border-0">
               <Skeleton className="h-9 flex-1 rounded-full" />
               <Skeleton className="size-9 rounded-full" />
             </CardFooter>
