@@ -113,8 +113,27 @@ const styles = StyleSheet.create({
 });
 
 function stripMarkdownFences(text: string): string {
-  // Simple cleanup: remove ``` fences, keep content
-  return text.replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, "").trim()).trim();
+  // Remove code fences (```lang ... ```) — keep content inside as indented text
+  const withoutFences = text.replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, "").trim());
+  // Remove blockquote markers
+  let cleaned = withoutFences.replace(/^>\s*/gm, "");
+  // Remove horizontal rules
+  cleaned = cleaned.replace(/^---+$/gm, "");
+  // Convert bold/italic markers to plain text
+  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, "$1");
+  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, "$1");
+  cleaned = cleaned.replace(/\*(.+?)\*/g, "$1");
+  // Remove table separators (| --- | --- |)
+  cleaned = cleaned.replace(/^\|[\s\-|:]+\|$/gm, "");
+  // Split table rows into readable lines
+  cleaned = cleaned.replace(/^\|/gm, "").replace(/\|$/gm, "");
+  // Remove numbered list markers
+  cleaned = cleaned.replace(/^\d+\.\s+/gm, "");
+  // Remove bullet markers
+  cleaned = cleaned.replace(/^[-*]\s+/gm, "");
+  // Trim empty lines
+  cleaned = cleaned.replace(/^\s*$/gm, "\n");
+  return cleaned.trim();
 }
 
 export function BlueprintPDF({ projectTitle, mode, sections }: BlueprintPDFProps) {

@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, Pencil, Save, Check, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { cn } from "cn";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Section = {
   id: string;
@@ -196,8 +198,8 @@ export function SectionItem({ section, defaultOpen = true }: { section: Section;
               </div>
             </div>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap leading-6 text-[13px] prose-p:my-2 prose-headings:font-semibold">
-              {value}
+            <div className="prose prose-sm dark:prose-invert max-w-none leading-6 text-[13px] prose-p:my-2 prose-headings:font-semibold prose-table:border-collapse prose-table:w-full prose-th:border prose-th:border-zinc-300 prose-th:bg-zinc-100 prose-th:p-2 prose-th:text-sm prose-td:border prose-td:border-zinc-300 prose-td:p-2 prose-tr:hover:bg-zinc-50 dark:prose-td:border-zinc-700 dark:prose-th:border-zinc-700 dark:prose-th:bg-zinc-800">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
             </div>
           )}
         </CardContent>
